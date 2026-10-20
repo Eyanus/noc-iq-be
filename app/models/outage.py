@@ -96,6 +96,10 @@ class PaginatedOutages(BaseModel):
 
 class ResolveOutageRequest(BaseModel):
     mttr_minutes: int = Field(..., ge=0, description="Mean time to resolve in minutes used for SLA computation")
+    resolution_notes: Optional[str] = Field(
+        None,
+        description="Optional operator notes captured at resolution time",
+    )
 
 
 class BulkResolveOutageRequest(BaseModel):
@@ -119,4 +123,3 @@ class BulkResolveOutageResponse(BaseModel):
     success_count: int = Field(..., description="Number of outages successfully resolved")
     failure_count: int = Field(..., description="Number of outages that failed to resolve")
     resolution_notes: str = Field("", description="Resolution notes applied to the batch")
-

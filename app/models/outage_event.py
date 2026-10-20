@@ -24,6 +24,10 @@ class OutagePatchedDetail(BaseModel):
 class OutageResolvedDetail(BaseModel):
     event_type: Literal["resolved"] = "resolved"
     mttr_minutes: int
+    resolution_notes: Optional[str] = Field(
+        None,
+        description="Optional operator notes captured at resolution time",
+    )
 
 
 class OutageBulkResolvedDetail(BaseModel):
