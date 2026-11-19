@@ -21,6 +21,10 @@ from app.core.dependencies import di_router
 from app.db.session import engine
 from app.middleware.body_size_limiter import BodySizeLimitMiddleware
 from app.middleware.correlation import CorrelationMiddleware
+from app.middleware.correlation_error_handler import (
+    correlation_exception_handler,
+    ensure_correlation_header,
+)
 from app.middleware.deprecation import DeprecationHeaderMiddleware
 from app.middleware.payload_size import PayloadSizeMiddleware
 from app.middleware.pool_saturation import PoolSaturationMiddleware
@@ -206,10 +210,15 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
     Schema: ``{"code": "VALIDATION_ERROR", "message": "...", "details": [...]}``.
     """
-    return JSONResponse(
+    response = JSONResponse(
         status_code=422,
         content=format_validation_errors(exc.errors()),
     )
+    ensure_correlation_header(request, response)
+    return response
+
+
+app.add_exception_handler(Exception, correlation_exception_handler)
 
 app.add_middleware(LatencyLoggingMiddleware)
 
