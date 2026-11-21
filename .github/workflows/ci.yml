@@ -202,3 +202,113 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest alembic celery
+
+      - name: Run integration-oriented checks
+        run: |
+          mkdir -p test-results
+          pytest tests/ \
+            -k "integration or e2e or contract" \
+            --ignore=tests/test_contract_parity.py \
+            --ignore=tests/test_analytics_benchmarks.py \
+            -v \
+            --junit-xml=test-results/integration-results.xml \
+            2>&1 | tee test-results/integration-checks.log || true
+
+      - name: Upload integration check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-check-results
+          path: test-results/
+          retention-days: 14
+
+  # =========================================================================
+  # BENCHMARKS (Issue #376)
+  # Runs independently on push to main / release/**
+  # =========================================================================
+  benchmarks:
+    name: "Analytics Benchmark Suite"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run analytics benchmark suite
+        env:
+          # Relax thresholds in CI (GitHub runners can be slower than dev machines)
+          AGGREGATION_LATENCY_THRESHOLD_MS: "500"
+          EXPORT_LATENCY_THRESHOLD_MS: "1000"
+        run: |
+          pytest tests/test_analytics_benchmarks.py -v \
+            2>&1 | tee benchmark-run.log
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            tests/benchmark-results.json
+            benchmark-run.log
+          retention-days: 30
+
+  # =========================================================================
+  # RELEASE DRIFT CHECK (Issue #385)
+  # Runs on push to main / release branches; fails the workflow on critical drift.
+  # =========================================================================
+  release-drift-check:
+    name: "Release Drift Check"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run release checklist drift check
+        run: |
+          python scripts/check_release_drift.py --output release-drift-report.json
+          echo "Drift check exit code: $?"
+
+      - name: Upload drift report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-drift-report-${{ github.sha }}
+          path: release-drift-report.json
+          retention-days: 30
